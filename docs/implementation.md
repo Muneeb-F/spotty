@@ -372,6 +372,35 @@ A sum replaces the app list entirely, as in the design, so Return can only mean 
 | -2^2 | −4 |
 | 1299\*1.13+ | 1,467.87 so far |
 
+## Timers, alarms and the stopwatch
+
+`ClockCommand.parse` (in `LauncherCore/Clock`) runs before the calculator on every keystroke. It
+needs a keyword as a whole word (`timer`, `alarm`, `stopwatch`, their plurals, or `stop watch`),
+so `time`, `5m` or `7pm` alone stay app searches. After the keyword and any leading filler (`set a
+… for`, `at`), it looks for the first run of words that reads as a length or a time of day; what's
+left is the label (`tea timer 4m` is a 4 minute timer called "tea").
+
+- **Lengths:** words are split where digits meet letters, so `1h30m` reads as `1 h 30 m`. Units are
+  `h/hr/hour`, `m/min/minute` and `s/sec/second` with plurals; fractions work (`1.5h`). A number with
+  no unit means minutes on its own and the next unit down after another (`1h 30`, `2m 15`). `4:30` is
+  m:ss and `1:00:00` h:mm:ss. Up to 99 hours.
+- **Times of day:** `7`, `7:30`, `7am`, `7:30 p.m.`, `19:00`, `noon`, `midnight`. With no am or pm
+  and an hour from 1 to 12, the alarm goes for whichever of the two comes first.
+- **No length or time** (`timer`, `alarm at`, `timer 100h`) gives `.list`, which shows what's running.
+
+`ClockBoard` holds the running `ClockItem`s, soonest first and the stopwatch last, and hands back the
+ones that are due. `ClockFormat` writes the figures by hand: countdowns round up, so a timer never
+reads `0:00` before it goes off, and the stopwatch shows tenths.
+
+In the app, `Clocks` owns the board. It doesn't poll: after each change it schedules one `Timer` for
+the moment the menu bar's figure next changes (`ClockBoard.nextTick`), which is also never later than
+the next thing due, and schedules nothing while the board is empty. Due items go to
+`RingController`, a non-activating panel that takes the first click so Stop works at once, and plays
+the system "Glass" sound every two seconds for at most 30 chimes. The panel's rows and figures
+redraw themselves with `TimelineView`, so they don't depend on the ticker. Nothing is saved to disk.
+
+`SPOTTY_SNAPSHOT='timer 2s⏎|/tmp/set.png;ring|/tmp/ring.png'` captures the pill in a debug build.
+
 ## The SwiftUI panel
 
 One `@Observable` model holds the query, what the tray shows and the selection; one SwiftUI view draws them in the Quiet layout; and the `NSPanel` owner handles the three things SwiftUI doesn't do well here: arrow keys and Tab inside a text field, top-anchored resizing, and showing without activating the app.

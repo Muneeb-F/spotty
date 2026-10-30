@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var hotKey: HotKey?
     let indexer = Indexer()
     let model = SearchModel()
+    let clocks = Clocks()
     private let usageFile = UsageFile()
     private let capsule = CapsuleController()
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -44,6 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.keyHandler = { [weak self] in self?.handleKey($0) ?? false }
         panel.composingChanged = { [weak self] in self?.model.isComposing = $0 }
         model.onActivate = { [weak self] in self?.perform($0) }
+        model.clocks = clocks
+        // Keep a clock tray that's on screen in step when something starts, stops or goes off.
+        clocks.onChange = { [weak self] in
+            guard let self, case .clock = model.tray else { return }
+            model.refresh()
+        }
         model.onContentChange = { [weak panel] in panel?.contentChanged() }
         hotKey = HotKey { [weak self] in self?.togglePanel() }
         #if DEBUG
@@ -131,6 +138,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSPasteboard.general.setString(text, forType: .string)  // "1467.87", never "1,467.87"
             panel.hide()
             say("Copied \(display)")
+        case .startClock(let command):
+            panel.hide()
+            guard let item = clocks.start(command) else { return }
+            switch item.kind {
+            case .timer: say("Timer set for \(ClockFormat.spoken(item.duration ?? 0))")
+            case .alarm: say("Alarm set for \(item.end.map(timeOfDay) ?? "")")
+            case .stopwatch: say("Stopwatch started")
+            }
+        case .stopClock(let item):
+            panel.hide()
+            guard clocks.stop(item.id) != nil else { return }
+            switch item.kind {
+            case .stopwatch: say("Stopwatch stopped at \(ClockFormat.stopwatch(item.elapsed(at: .now)))")
+            case .timer: say("Cancelled \(item.title)")
+            case .alarm: say("Cancelled alarm for \(item.end.map(timeOfDay) ?? "")")
+            }
         case .launch(let app, _, reveal: true):
             panel.hide()
             NSWorkspace.shared.activateFileViewerSelecting([app.url])

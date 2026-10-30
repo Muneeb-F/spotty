@@ -1,6 +1,6 @@
 # Spotty
 
-A small replacement for Spotlight that does two things: opens apps and does sums.
+A small replacement for Spotlight that opens apps, does sums, and keeps timers, alarms and a stopwatch.
 No file search, no AI, no web results.
 
 ## Install
@@ -45,13 +45,29 @@ If the shortcut can't be registered, the menu and Settings say "⌘Space is take
 
 | Key | Does |
 | --- | --- |
-| ↩ | Open the selected app, or copy the result of a sum |
+| ↩ | Open the selected app, copy the result of a sum, or start or stop a clock |
 | ⌘↩ | Reveal the selected app in Finder |
 | ↑ ↓ | Move the selection |
 | ⇥ | Accept the grey completion |
 | esc | Clear the field; press again to close |
 | ⌘1–⌘5 | Open a recent app while the field is empty |
 | ⌘C | Copy the result of a sum |
+
+## Timers, alarms and the stopwatch
+
+Each one starts with its keyword, so app searches never turn into timers:
+
+| Type | Does |
+| --- | --- |
+| `timer 5m`, `timer 1h30m`, `timer 4:30`, `tea timer 4 min` | Return starts a timer (a bare number means minutes; any other words become its name) |
+| `alarm 7:30`, `alarm 7pm`, `alarm 19:00 standup` | Return sets an alarm for the next time the clock reads that (`7:30` alone picks whichever of 7:30 and 19:30 comes first) |
+| `stopwatch` | Return starts the stopwatch, or stops it and shows the time |
+| `timer`, `alarm` or `timers` | Lists what's running; Return stops the selected one |
+
+While anything runs, the menu bar shows its icon and the time left (or the stopwatch's time), and
+the menu lists each one with Stop. When a timer or alarm goes off, a pill at the top of the screen
+chimes every two seconds for up to a minute until you click Stop. Clocks live in memory only, so
+quitting Spotty clears them.
 
 ## Files
 
@@ -62,7 +78,7 @@ of the previous good copy) and, if you create it, `aliases.json`: extra names by
 ## Layout
 
 - `Sources/LauncherCore`: the UI-free core (matching, ranking, what it learns, the calculator, the app
-  scanner). Foundation only; `swift test` covers it.
+  scanner, and parsing timer, alarm and stopwatch commands). Foundation only; `swift test` covers it.
 - `Sources/Spotty`: the app. AppKit for the panel, hotkey, FSEvents and launching; SwiftUI for the views.
 - `scripts/bundle.sh`: builds `build/Spotty.app`.
 - `docs/implementation.md`: how every part works (indexing, re-indexing, matching, ranking, calculator, panel).

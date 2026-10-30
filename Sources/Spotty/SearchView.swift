@@ -69,8 +69,32 @@ struct SearchView: View {
         case .math(let expression, let outcome):
             SectionLabel(title: "Math")
             MathTray(expression: expression, outcome: outcome) { model.activateSelection() }
+        case .clock(.list(let kind, let items)) where !items.isEmpty:
+            SectionLabel(title: "Running", count: items.count)
+            clockRows(items)
+            WhyLine(text: kind == .alarm ? "Add a time to set another, like “alarm 7:30”."
+                                         : "Add a length to set another, like “timer 5m”.")
+        case .clock(let clock):
+            SectionLabel(title: clock.title)
+            ClockTrayView(tray: clock) { model.activateSelection() }
         case .nothing:
             SectionLabel(title: "Nothing matches “\(model.query.trimmingCharacters(in: .whitespaces))”.")
+        }
+    }
+
+    private func clockRows(_ items: [ClockItem]) -> some View {
+        VStack(spacing: 1) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                ClockRowView(item: item, selected: i == model.selection)
+                    .contentShape(.rect)
+                    .onContinuousHover { phase in
+                        if case .active = phase { model.hover(i) }
+                    }
+                    .onTapGesture {
+                        model.selection = i
+                        model.activateSelection()
+                    }
+            }
         }
     }
 
@@ -262,5 +286,164 @@ private struct MathTray: View {
             out += piece
         }
         return out
+    }
+}
+
+extension ClockTray {
+    var title: String {
+        switch self {
+        case .start(.alarm): "Alarm"
+        case .start: "Timer"
+        case .stopwatch: "Stopwatch"
+        case .list(.alarm, _): "Alarm"
+        case .list(.stopwatch, _): "Stopwatch"
+        case .list: "Timer"
+        }
+    }
+}
+
+/// A running timer, alarm or stopwatch: its icon, title and live figure. Return stops it.
+private struct ClockRowView: View {
+    let item: ClockItem
+    let selected: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.kind.symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(Quiet.ink3)
+                .frame(width: 22, height: 22)
+            HStack(spacing: 6) {
+                Text(item.title).foregroundStyle(selected ? Quiet.ink1 : Quiet.ink2)
+                if item.kind == .alarm, let end = item.end { Text(timeOfDay(end)).foregroundStyle(Quiet.ink4) }
+            }
+            .font(.system(size: 13))
+            .lineLimit(1)
+            Spacer(minLength: 8)
+            TimelineView(.periodic(from: .now, by: item.kind == .stopwatch ? 0.1 : 1)) { context in
+                Text(item.readout(at: context.date))
+                    .font(.system(size: 11.5).monospacedDigit())
+                    .foregroundStyle(Quiet.ink4)
+            }
+            if selected { Keycap(text: "Stop ↩") }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: 10).fill(Quiet.fillSelected)
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Quiet.ringSelected, lineWidth: 1))
+            }
+        }
+    }
+}
+
+/// The math tray's twin for clocks: a caption, a 42 pt figure and one filled button.
+private struct ClockTrayView: View {
+    let tray: ClockTray
+    let act: () -> Void
+    @State private var buttonHovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(caption(at: context.date))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Quiet.ink3)
+                    .lineLimit(1)
+            }
+            HStack(alignment: .bottom) {
+                figure
+                Spacer(minLength: 12)
+                if let action {
+                    Button(action: act) {
+                        HStack(spacing: 5) { Text(action); Text("↩") }
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(Quiet.onAccent)
+                            .padding(.horizontal, 14)
+                            .frame(height: 30)
+                            .background(Quiet.accent.opacity(buttonHovered ? 0.85 : 1), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { buttonHovered = $0 }
+                    .padding(.bottom, 4)
+                }
+            }
+            .frame(height: 46)
+        }
+        .padding(EdgeInsets(top: 12, leading: 14, bottom: 14, trailing: 14))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Quiet.wash, in: .rect(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Quiet.washRing, lineWidth: 0.5))
+    }
+
+    private var action: String? {
+        switch tray {
+        case .start(.alarm): "Set"
+        case .start: "Start"
+        case .stopwatch(let running, _): running == nil ? "Start" : "Stop"
+        case .list: nil
+        }
+    }
+
+    private func caption(at now: Date) -> String {
+        switch tray {
+        case .start(.timer(let seconds, let label)):
+            let ends = "ends \(timeOfDay(now + TimeInterval(seconds)))"
+            return [label, ClockFormat.spoken(seconds), ends].compactMap { $0 }.joined(separator: " · ")
+        case .start(.alarm(let date, let label)):
+            let left = "in \(ClockFormat.spoken(Int((date.timeIntervalSince(now) / 60).rounded(.up)) * 60))"
+            return [label, left].compactMap { $0 }.joined(separator: " · ")
+        case .stopwatch(let running?, _):
+            return [running.label, "Running"].compactMap { $0 }.joined(separator: " · ")
+        case .stopwatch(nil, let label):
+            return label ?? "Counts up from zero"
+        case .list(.alarm, _):
+            return "No alarms set"
+        case .list:
+            return "No timers running"
+        case .start:
+            return ""
+        }
+    }
+
+    @ViewBuilder private var figure: some View {
+        switch tray {
+        case .start(.timer(let seconds, _)):
+            Hero(text: ClockFormat.clock(seconds))
+        case .start(.alarm(let date, _)):
+            Hero(text: timeOfDay(date))
+        case .stopwatch(let running?, _):
+            TimelineView(.periodic(from: .now, by: 0.1)) { context in
+                Hero(text: ClockFormat.stopwatch(running.elapsed(at: context.date)))
+            }
+        case .stopwatch(nil, _):
+            Hero(text: "0:00.0")
+        case .list(.alarm, _):
+            Prompt(text: "Add a time, like “alarm 7:30”")
+        case .list(.stopwatch, _), .list, .start:
+            Prompt(text: "Add a length, like “timer 5m”")
+        }
+    }
+
+    private struct Hero: View {
+        let text: String
+        var body: some View {
+            Text(text)
+                .font(.system(size: 42, weight: .semibold).monospacedDigit())
+                .tracking(-1.47)
+                .foregroundStyle(Quiet.ink1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+    }
+
+    private struct Prompt: View {
+        let text: String
+        var body: some View {
+            Text(text)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Quiet.ink3)
+        }
     }
 }

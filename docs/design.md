@@ -22,6 +22,14 @@ This file copies what the Swift code needs. Sizes are in points.
   Return. Nothing shows after an app opens (Hussein, 2026-10-27): the app itself is the confirmation.
 - Anything with a digit and an operator is a sum. A sum replaces the app list with the math tray.
   While it is unfinished, the tray shows the value so far in ink-3.
+- `timer`, `alarm` and `stopwatch` (as whole words) open the clock tray in place of the list. It is
+  the math tray's twin: a caption in ink-3, a 42 pt figure (`10:00`, `7:30 AM`, `0:02.3`) with
+  monospaced digits, and one filled button: Start, Set (alarms) or Stop (a running stopwatch).
+  The keyword alone lists what's running as rows (icon, name, live figure in ink-4, a "Stop ↩"
+  keycap on the selected row) with a why line saying how to add another.
+- While a clock runs, the menu bar swaps the magnifying glass for the clock's icon and its figure.
+- A timer or alarm going off shows the ring pill: plate, full radius, 36 tall, at the top of the
+  screen, an indigo bell, the text in ink-1, and a filled Stop button. It stays until Stop.
 
 ## Anatomy
 
@@ -78,7 +86,7 @@ Follow the system appearance.
 
 | Key | Does |
 | --- | --- |
-| ↩ | Open the selected app, or copy the result of a sum |
+| ↩ | Open the selected app, copy the result of a sum, or start or stop a clock |
 | ↑ ↓ | Move the selection |
 | ⇥ | Accept the grey completion |
 | esc | Clear the field; press again to close |
@@ -104,3 +112,8 @@ Follow the system appearance.
 - Completion that doesn't continue the typed text: `  →  Visual Studio Code`
 - Nothing found: `Nothing matches “zzz”.`
 - Unfinished sum: note "So far" with the value, or "Keep typing" when there is no value yet.
+- Clock tray caption: `tea · 10 minutes · ends 12:39 AM`, `in 7 hours 1 minute`, `Running`, `No timers running`
+- Clock tray prompt: `Add a length, like “timer 5m”` / `Add a time, like “alarm 7:30”`
+- Capsule: `Timer set for 25 minutes`, `Alarm set for 7:30 AM`, `Stopwatch started`,
+  `Stopwatch stopped at 1:23.4`, `Cancelled 25 min timer`
+- Ring pill: `tea is done · 10 min`, `Timer done · 5 min`, `Alarm · 7:30 AM`, `2 timers are done`

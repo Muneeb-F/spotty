@@ -10,8 +10,20 @@ enum Tray: Equatable {
     case apps([AppRow])
     /// A sum replaces the list entirely.
     case math(expression: String, outcome: CalcOutcome)
+    /// "timer 5m", "alarm 7:30", "stopwatch": replaces the list like a sum does.
+    case clock(ClockTray)
     /// "Nothing matches “zzz”."
     case nothing
+}
+
+/// What the clock tray shows.
+enum ClockTray: Equatable {
+    /// A timer or alarm ready to start: Return starts it.
+    case start(ClockCommand)
+    /// "stopwatch": Return starts one, or stops the one that's running.
+    case stopwatch(running: ClockItem?, label: String?)
+    /// The keyword alone: what's running as rows (Return stops the selected one) and a hint.
+    case list(ClockKind, [ClockItem])
 }
 
 struct AppRow: Identifiable, Equatable {
@@ -28,6 +40,8 @@ enum Activation {
     /// `query` is what was typed; opening any app for it teaches the query to put that app first.
     case launch(AppEntry, query: String, reveal: Bool)
     case copy(display: String, text: String)
+    case startClock(ClockCommand)
+    case stopClock(ClockItem)
 }
 
 @MainActor @Observable
@@ -41,6 +55,8 @@ final class SearchModel {
     var isComposing = false
     var index = AppIndex.empty { didSet { refresh() } }
     var usage = UsageStore()
+    /// The running timers, alarms and stopwatch, for the clock tray.
+    @ObservationIgnored var clocks: Clocks?
     @ObservationIgnored var onActivate: ((Activation) -> Void)?
     /// Told after every change to the tray or selection (the why line comes and goes with it),
     /// so the panel can resize before SwiftUI draws the change.
@@ -48,6 +64,12 @@ final class SearchModel {
 
     func refresh() {
         let typed = QueryKeys(query)
+        if !typed.isEmpty, let command = ClockCommand.parse(query) {
+            tray = .clock(clockTray(command))
+            selection = 0
+            onContentChange?()
+            return
+        }
         let sum = Calculator.evaluate(query)
         if typed.isEmpty {
             // Ask for more than five, since a recent app may have been deleted since.
@@ -64,11 +86,21 @@ final class SearchModel {
         onContentChange?()
     }
 
+    private func clockTray(_ command: ClockCommand) -> ClockTray {
+        let board = clocks?.board ?? ClockBoard()
+        switch command {
+        case .timer, .alarm: return .start(command)
+        case .stopwatch(let label): return .stopwatch(running: board.stopwatch, label: label)
+        case .list(let kind): return .list(kind, board.items)
+        }
+    }
+
     var rowCount: Int {
         switch tray {
         case .recent(let apps): apps.count
         case .apps(let rows): rows.count
-        case .math, .nothing: 0
+        case .clock(.list(_, let items)): items.count
+        case .math, .clock, .nothing: 0
         }
     }
 
@@ -122,6 +154,14 @@ final class SearchModel {
             onActivate?(.launch(apps[selection], query: "", reveal: reveal))
         case .apps(let rows) where rows.indices.contains(selection):
             onActivate?(.launch(rows[selection].app, query: query, reveal: reveal))
+        case .clock(.start(let command)):
+            onActivate?(.startClock(command))
+        case .clock(.stopwatch(let running?, _)):
+            onActivate?(.stopClock(running))
+        case .clock(.stopwatch(nil, let label)):
+            onActivate?(.startClock(.stopwatch(label: label)))
+        case .clock(.list(_, let items)) where items.indices.contains(selection):
+            onActivate?(.stopClock(items[selection]))
         default:
             break  // an unfinished sum, an error, or no match: Return does nothing
         }

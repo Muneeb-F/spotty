@@ -3,7 +3,7 @@ import AppKit
 
 /// Development aid: `SPOTTY_SNAPSHOT='query|/tmp/out.png'` opens the panel, types the query,
 /// saves the panel as a PNG and quits. Several shots: separate them with `;`. A query ending in
-/// `⏎` presses Return and saves the capsule instead.
+/// `⏎` presses Return and saves the capsule instead. `ring|out.png` saves a timer going off.
 @MainActor
 enum DebugSnapshot {
     static func runIfAsked(_ app: AppDelegate) {
@@ -52,6 +52,25 @@ enum DebugSnapshot {
                 }
                 take(shots.dropFirst(), app)
             }
+            return
+        }
+        // `ring|out.png` waits up to 10 s for a timer to go off and saves the ringing pill.
+        if shot[0] == "ring" {
+            func wait(_ tries: Int) {
+                if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "ring" && $0.isVisible }),
+                   let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: shot[1]))
+                    print("snapshot \(shot[1]) ring frame=\(window.frame)")
+                    take(shots.dropFirst(), app)
+                } else if tries > 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { wait(tries - 1) }
+                } else {
+                    print("snapshot \(shot[1]) no ring")
+                    take(shots.dropFirst(), app)
+                }
+            }
+            wait(40)
             return
         }
         // Every shot closes and reopens the panel, as a real ⌘Space would, unless its query
